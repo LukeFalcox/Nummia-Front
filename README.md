@@ -33,6 +33,12 @@ docker run --rm -p 8080:80 nummia
 
 Open [http://localhost:8080](http://localhost:8080). The container listens on port 80; the command maps it to port 8080 on your machine. Press `Ctrl+C` to stop it.
 
+## Deploy to GitHub Pages
+
+The GitHub Actions workflow in `.github/workflows/deploy-pages.yml` builds and deploys the site whenever code is pushed to `main` or `develop`. It also supports manual runs from the repository's **Actions** tab. The build uses `/Nummia/` as its base path for this repository.
+
+To enable deployment, open the repository's **Settings → Pages** and set the build and deployment source to **GitHub Actions**. After the workflow completes, the site is available at [https://lukefalcox.github.io/Nummia/](https://lukefalcox.github.io/Nummia/).
+
 ## Useful scripts
 
 - `npm run dev` — start the development server on port 3000.

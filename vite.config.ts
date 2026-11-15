@@ -7,6 +7,7 @@ import viteReact from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
 const config = defineConfig({
+  base: process.env.GITHUB_PAGES === 'true' ? '/Nummia/' : '/',
   resolve: { tsconfigPaths: true },
   plugins: [
     devtools(),
