@@ -2,7 +2,43 @@
 
 Nummia is being built as a personal finance management platform. Its goal is to help people understand, organize, and improve their financial lives by bringing financial information together, automating routine tasks, and using AI agents to provide assistance.
 
-> **Project status:** This repository currently contains an early frontend scaffold built with React, TanStack Start, and Vite. The product features described above are the project vision and are not yet implemented in this app.
+> **Status do projeto:** início do front-end do MVP. Todas as telas previstas no planejamento existem e funcionam com **dados simulados (mocks)** até o back-end (Spring Boot) estar disponível.
+
+## Stack
+
+React 19 · TypeScript · Vite · TanStack Router (rotas por arquivo) · Tailwind CSS v4 · componentes no padrão shadcn/ui (Radix) · Recharts · Axios · Lucide Icons.
+
+## Telas
+
+| Rota | Tela |
+| --- | --- |
+| `/login`, `/cadastro` | Login e cadastro |
+| `/dashboard` | Dashboard financeiro (indicadores, fluxo de caixa, gastos por categoria, insights) |
+| `/movimentacoes` | Receitas e despesas, com filtros por mês, tipo, categoria e busca |
+| `/contas` | Contas e cartões |
+| `/categorias` | Categorias e limites mensais |
+| `/metas` | Metas financeiras |
+| `/assistente` | Assistente de IA (chat) |
+| `/configuracoes` | Perfil, tema, notificações e privacidade (LGPD) |
+
+## Estrutura
+
+```
+src/
+  components/ui/       componentes base (padrão shadcn/ui; components.json pronto para o CLI)
+  components/layout/   sidebar, header, page header, estados vazios/erro
+  components/charts/   gráficos (Recharts)
+  features/auth/       store de autenticação (JWT) e hook useAuth
+  services/            camada de acesso à API — cada função usa mocks ou Axios
+  mocks/               dados simulados
+  lib/                 cliente Axios, env, utilitários de formatação
+  types/               tipos de domínio (contrato esperado da API)
+  routes/              rotas: _auth (públicas) e _app (protegidas)
+```
+
+## Integração com o back-end
+
+Copie `.env.example` para `.env` e defina `VITE_API_URL`. Sem essa variável, o app roda em **modo demonstração** (qualquer e-mail + senha com 6+ caracteres). Os endpoints esperados estão nos arquivos de `src/services/` e os formatos de dados em `src/types/`. O token JWT é enviado no header `Authorization: Bearer` e uma resposta 401 encerra a sessão.
 
 ## Run locally with npm
 
