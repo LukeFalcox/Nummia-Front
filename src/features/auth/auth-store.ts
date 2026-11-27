@@ -1,15 +1,8 @@
 import { useSyncExternalStore } from 'react'
-import { setUnauthorizedHandler } from '#/lib/api'
-import { tokenStorage } from '#/lib/token-storage'
-import { authService } from '#/services/auth.service'
-import type { LoginPayload, RegisterPayload, User } from '#/types'
+import { authApi, tokenStorage, userApi } from '#/api/api'
+import type { LoginRequest, RegisterRequest, User } from '#/api/types'
 
 const USER_KEY = 'nummia.user'
-
-interface AuthState {
-  user: User | null
-  token: string | null
-}
 
 function readUser(): User | null {
   try {
@@ -20,13 +13,13 @@ function readUser(): User | null {
   }
 }
 
-let state: AuthState = { token: tokenStorage.get(), user: readUser() }
+let user: User | null = readUser()
 const listeners = new Set<() => void>()
 
-function setState(next: AuthState) {
-  state = next
+function setUser(next: User | null) {
+  user = next
   try {
-    if (next.user) localStorage.setItem(USER_KEY, JSON.stringify(next.user))
+    if (next) localStorage.setItem(USER_KEY, JSON.stringify(next))
     else localStorage.removeItem(USER_KEY)
   } catch {
     /* armazenamento indisponível */
@@ -35,45 +28,45 @@ function setState(next: AuthState) {
 }
 
 export const authStore = {
-  getState: () => state,
-  isAuthenticated: () => Boolean(state.token),
+  getUser: () => user,
+  /** Há sessão se existe accessToken; se ele expirar, o api.ts renova com o refreshToken. */
+  isAuthenticated: () => Boolean(tokenStorage.access),
   subscribe(listener: () => void) {
     listeners.add(listener)
     return () => listeners.delete(listener)
   },
 
-  async login(payload: LoginPayload) {
-    const { token, user } = await authService.login(payload)
-    tokenStorage.set(token)
-    setState({ token, user })
+  async login(payload: LoginRequest) {
+    const { user: me } = await authApi.login(payload)
+    setUser(me)
   },
 
-  async register(payload: RegisterPayload) {
-    const { token, user } = await authService.register(payload)
-    tokenStorage.set(token)
-    setState({ token, user })
+  async register(payload: RegisterRequest) {
+    const { user: me } = await authApi.register(payload)
+    setUser(me)
   },
 
-  setUser(user: User) {
-    setState({ ...state, user })
+  /** Garante os dados do usuário (ex.: ao abrir o app com uma sessão salva). */
+  async ensureUser() {
+    if (!user) setUser(await userApi.me())
+    return user
   },
 
-  logout() {
+  setUser,
+
+  async logout() {
+    setUser(null)
+    await authApi.logout()
+  },
+
+  /** Sessão expirada: limpa os dados locais (os tokens já foram limpos pelo api.ts). */
+  clear() {
     tokenStorage.clear()
-    setState({ token: null, user: null })
+    setUser(null)
   },
 }
 
-setUnauthorizedHandler(() => authStore.logout())
-
 export function useAuth() {
-  const snapshot = useSyncExternalStore(authStore.subscribe, authStore.getState)
-  return {
-    ...snapshot,
-    isAuthenticated: Boolean(snapshot.token),
-    login: authStore.login,
-    register: authStore.register,
-    logout: authStore.logout,
-    setUser: authStore.setUser,
-  }
+  const current = useSyncExternalStore(authStore.subscribe, authStore.getUser)
+  return { user: current, setUser: authStore.setUser, logout: authStore.logout }
 }

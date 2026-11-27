@@ -4,9 +4,13 @@ import { AppSidebar } from '#/components/layout/app-sidebar'
 import { authStore } from '#/features/auth/auth-store'
 
 export const Route = createFileRoute('/_app')({
-  beforeLoad: () => {
-    if (!authStore.isAuthenticated()) {
-      throw redirect({ to: '/login' })
+  beforeLoad: async () => {
+    if (!authStore.isAuthenticated()) throw redirect({ to: '/login' })
+    try {
+      await authStore.ensureUser()
+    } catch {
+      // Sem conexão com a API ou sessão inválida: o api.ts já tratou o 401.
+      if (!authStore.isAuthenticated()) throw redirect({ to: '/login' })
     }
   },
   component: AppLayout,

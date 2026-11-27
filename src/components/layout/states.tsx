@@ -1,7 +1,7 @@
 import { AlertTriangle, Inbox } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Button } from '#/components/ui/button'
-import { getErrorMessage } from '#/lib/api'
+import { apiErrorMessage } from '#/api/api'
 
 export function EmptyState({
   title,
@@ -39,7 +39,7 @@ export function ErrorState({
       <AlertTriangle className="size-8 text-destructive" />
       <p className="font-medium">Não foi possível carregar os dados</p>
       <p className="max-w-sm text-sm text-muted-foreground">
-        {getErrorMessage(error)}
+        {apiErrorMessage(error)}
       </p>
       {onRetry && (
         <Button variant="outline" size="sm" className="mt-2" onClick={onRetry}>

@@ -1,25 +1,43 @@
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts'
-import { formatCurrency } from '#/lib/utils'
-import type { CategorySpending } from '#/types'
+import type { CategoryShare } from '#/api/types'
+import { formatCurrency, formatPercent } from '#/lib/utils'
 
-export function SpendingDonut({ data }: { data: Array<CategorySpending> }) {
-  const total = data.reduce((s, d) => s + d.amount, 0)
+const fallbackColors = [
+  'var(--chart-1)',
+  'var(--chart-2)',
+  'var(--chart-3)',
+  'var(--chart-4)',
+  'var(--chart-5)',
+  'var(--chart-6)',
+]
+
+export function SpendingDonut({
+  data,
+  total,
+}: {
+  data: Array<CategoryShare>
+  total: number
+}) {
+  const colored = data.map((d, i) => ({
+    ...d,
+    fill: d.color ?? fallbackColors[i % fallbackColors.length],
+  }))
   return (
-    <div className="flex flex-col items-center gap-4 sm:flex-row">
+    <div className="flex flex-col items-center gap-4 sm:flex-row xl:flex-col 2xl:flex-row">
       <div className="relative size-44 shrink-0">
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
             <Pie
-              data={data}
-              dataKey="amount"
+              data={colored}
+              dataKey="total"
               nameKey="name"
               innerRadius="68%"
               outerRadius="100%"
               paddingAngle={2}
               stroke="none"
             >
-              {data.map((entry) => (
-                <Cell key={entry.categoryId} fill={entry.color} />
+              {colored.map((entry) => (
+                <Cell key={entry.categoryId} fill={entry.fill} />
               ))}
             </Pie>
             <Tooltip
@@ -42,15 +60,15 @@ export function SpendingDonut({ data }: { data: Array<CategorySpending> }) {
         </div>
       </div>
       <ul className="w-full space-y-2 text-sm">
-        {data.map((item) => (
+        {colored.slice(0, 7).map((item) => (
           <li key={item.categoryId} className="flex items-center gap-2">
             <span
               className="size-2.5 shrink-0 rounded-full"
-              style={{ backgroundColor: item.color }}
+              style={{ backgroundColor: item.fill }}
             />
             <span className="flex-1 truncate">{item.name}</span>
             <span className="text-muted-foreground tabular-nums">
-              {Math.round((item.amount / total) * 100)}%
+              {formatPercent(item.percentage)}
             </span>
           </li>
         ))}

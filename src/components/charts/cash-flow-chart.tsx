@@ -1,29 +1,23 @@
 import {
-  Area,
-  AreaChart,
+  Bar,
+  BarChart,
   CartesianGrid,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from 'recharts'
-import { formatCompactCurrency, formatCurrency } from '#/lib/utils'
-import type { MonthlySummary } from '#/types'
+import type { MonthlyTotal } from '#/api/types'
+import { formatCompactCurrency, formatCurrency, formatMonth } from '#/lib/utils'
 
-export function CashFlowChart({ data }: { data: Array<MonthlySummary> }) {
+export function CashFlowChart({ data }: { data: Array<MonthlyTotal> }) {
   return (
     <ResponsiveContainer width="100%" height={280}>
-      <AreaChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-        <defs>
-          <linearGradient id="fillIncome" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="var(--income)" stopOpacity={0.3} />
-            <stop offset="100%" stopColor="var(--income)" stopOpacity={0} />
-          </linearGradient>
-          <linearGradient id="fillExpense" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="var(--expense)" stopOpacity={0.25} />
-            <stop offset="100%" stopColor="var(--expense)" stopOpacity={0} />
-          </linearGradient>
-        </defs>
+      <BarChart
+        data={data}
+        margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
+        barGap={4}
+      >
         <CartesianGrid vertical={false} stroke="var(--border)" />
         <XAxis
           dataKey="month"
@@ -32,6 +26,7 @@ export function CashFlowChart({ data }: { data: Array<MonthlySummary> }) {
           tickMargin={8}
           stroke="var(--muted-foreground)"
           fontSize={12}
+          tickFormatter={(m: string) => formatMonth(m, 'short')}
         />
         <YAxis
           tickLine={false}
@@ -42,7 +37,7 @@ export function CashFlowChart({ data }: { data: Array<MonthlySummary> }) {
           tickFormatter={(v: number) => formatCompactCurrency(v)}
         />
         <Tooltip
-          cursor={{ stroke: 'var(--border)' }}
+          cursor={{ fill: 'var(--muted)', opacity: 0.6 }}
           contentStyle={{
             background: 'var(--popover)',
             border: '1px solid var(--border)',
@@ -50,26 +45,25 @@ export function CashFlowChart({ data }: { data: Array<MonthlySummary> }) {
             color: 'var(--popover-foreground)',
             fontSize: 13,
           }}
+          labelFormatter={(m) => formatMonth(String(m))}
           formatter={(value, name) => [
             formatCurrency(Number(value)),
             name === 'income' ? 'Receitas' : 'Despesas',
           ]}
         />
-        <Area
-          type="monotone"
+        <Bar
           dataKey="income"
-          stroke="var(--income)"
-          strokeWidth={2}
-          fill="url(#fillIncome)"
+          fill="var(--income)"
+          radius={[4, 4, 0, 0]}
+          maxBarSize={28}
         />
-        <Area
-          type="monotone"
+        <Bar
           dataKey="expense"
-          stroke="var(--expense)"
-          strokeWidth={2}
-          fill="url(#fillExpense)"
+          fill="var(--expense)"
+          radius={[4, 4, 0, 0]}
+          maxBarSize={28}
         />
-      </AreaChart>
+      </BarChart>
     </ResponsiveContainer>
   )
 }

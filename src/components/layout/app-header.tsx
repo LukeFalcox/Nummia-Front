@@ -18,6 +18,7 @@ import { useTheme } from '#/hooks/use-theme'
 import { env } from '#/lib/env'
 import { getInitials } from '#/lib/utils'
 import { SidebarContent } from './app-sidebar'
+import { NotificationsBell } from './notifications-bell'
 
 function MobileNav() {
   const [open, setOpen] = useState(false)
@@ -64,6 +65,7 @@ export function AppHeader() {
           Modo demonstração
         </Badge>
       )}
+      <NotificationsBell />
       <Button
         variant="ghost"
         size="icon"
@@ -96,8 +98,7 @@ export function AppHeader() {
           <DropdownMenuItem
             variant="destructive"
             onSelect={() => {
-              logout()
-              void navigate({ to: '/login' })
+              void logout().finally(() => navigate({ to: '/login' }))
             }}
           >
             <LogOut /> Sair
