@@ -1,6 +1,7 @@
 import { cn, formatCurrency } from '#/lib/utils'
-import type { TransactionType } from '#/types'
+import type { TransactionType } from '#/api/types'
 
+/** Despesas em vermelho com "−", receitas em verde com "+", transferências neutras. */
 export function Money({
   value,
   type,
@@ -13,13 +14,14 @@ export function Money({
   return (
     <span
       className={cn(
-        'font-medium tabular-nums',
-        type === 'income' && 'text-income',
-        type === 'expense' && 'text-expense',
+        'font-medium whitespace-nowrap tabular-nums',
+        type === 'INCOME' && 'text-income',
+        type === 'EXPENSE' && 'text-expense',
+        type === 'TRANSFER' && 'text-muted-foreground',
         className,
       )}
     >
-      {type === 'income' ? '+ ' : type === 'expense' ? '− ' : ''}
+      {type === 'INCOME' ? '+ ' : type === 'EXPENSE' ? '− ' : ''}
       {formatCurrency(value)}
     </span>
   )

@@ -1,35 +1,41 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { Link, createFileRoute, useNavigate } from '@tanstack/react-router'
+import { apiErrorMessage, apiFieldErrors } from '#/api/api'
+import { Field, FormError } from '#/components/form'
 import { Button } from '#/components/ui/button'
 import { Input } from '#/components/ui/input'
-import { Label } from '#/components/ui/label'
 import { authStore } from '#/features/auth/auth-store'
-import { getErrorMessage } from '#/lib/api'
 
 export const Route = createFileRoute('/_auth/cadastro')({
   component: RegisterPage,
 })
 
+const PASSWORD_RULE = /^(?=.*[A-Za-z])(?=.*\d).{8,72}$/
+
 function RegisterPage() {
   const navigate = useNavigate()
   const [error, setError] = useState<string | null>(null)
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [submitting, setSubmitting] = useState(false)
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const form = new FormData(event.currentTarget)
     const password = String(form.get('password'))
-    if (password !== String(form.get('confirm'))) {
-      setError('As senhas não coincidem.')
-      return
-    }
+    const errors: Record<string, string> = {}
+    if (!PASSWORD_RULE.test(password))
+      errors.password = 'Use de 8 a 72 caracteres, com letras e números.'
+    if (password !== String(form.get('confirm')))
+      errors.confirm = 'As senhas não coincidem.'
+    setFieldErrors(errors)
+    setError(null)
+    if (Object.keys(errors).length > 0) return
     if (!form.get('terms')) {
       setError('É preciso aceitar os termos e a política de privacidade.')
       return
     }
     setSubmitting(true)
-    setError(null)
     try {
       await authStore.register({
         name: String(form.get('name')).trim(),
@@ -38,7 +44,9 @@ function RegisterPage() {
       })
       await navigate({ to: '/dashboard' })
     } catch (err) {
-      setError(getErrorMessage(err))
+      const fields = apiFieldErrors(err)
+      setFieldErrors(fields)
+      if (Object.keys(fields).length === 0) setError(apiErrorMessage(err))
     } finally {
       setSubmitting(false)
     }
@@ -54,50 +62,58 @@ function RegisterPage() {
           Comece a organizar suas finanças em poucos minutos.
         </p>
       </div>
-      <form onSubmit={handleSubmit} className="grid gap-4">
-        <div className="grid gap-2">
-          <Label htmlFor="name">Nome</Label>
+      <form onSubmit={handleSubmit} className="grid gap-4" noValidate>
+        <Field label="Nome" htmlFor="name" error={fieldErrors.name}>
           <Input
             id="name"
             name="name"
             autoComplete="name"
             required
-            minLength={2}
+            aria-invalid={!!fieldErrors.name}
           />
-        </div>
-        <div className="grid gap-2">
-          <Label htmlFor="email">E-mail</Label>
+        </Field>
+        <Field label="E-mail" htmlFor="email" error={fieldErrors.email}>
           <Input
             id="email"
             name="email"
             type="email"
             autoComplete="email"
             required
+            aria-invalid={!!fieldErrors.email}
           />
-        </div>
+        </Field>
         <div className="grid gap-4 sm:grid-cols-2">
-          <div className="grid gap-2">
-            <Label htmlFor="password">Senha</Label>
+          <Field
+            label="Senha"
+            htmlFor="password"
+            error={fieldErrors.password}
+            hint="8+ caracteres, letras e números"
+          >
             <Input
               id="password"
               name="password"
               type="password"
               autoComplete="new-password"
               required
-              minLength={8}
+              maxLength={72}
+              aria-invalid={!!fieldErrors.password}
             />
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="confirm">Confirmar senha</Label>
+          </Field>
+          <Field
+            label="Confirmar senha"
+            htmlFor="confirm"
+            error={fieldErrors.confirm}
+          >
             <Input
               id="confirm"
               name="confirm"
               type="password"
               autoComplete="new-password"
               required
-              minLength={8}
+              maxLength={72}
+              aria-invalid={!!fieldErrors.confirm}
             />
-          </div>
+          </Field>
         </div>
         <label className="flex items-start gap-2 text-sm text-muted-foreground">
           <input
@@ -107,11 +123,7 @@ function RegisterPage() {
           />
           Li e aceito os termos de uso e a política de privacidade (LGPD).
         </label>
-        {error && (
-          <p role="alert" className="text-sm text-destructive">
-            {error}
-          </p>
-        )}
+        <FormError message={error} />
         <Button type="submit" size="lg" disabled={submitting}>
           {submitting ? 'Criando conta…' : 'Criar conta'}
         </Button>

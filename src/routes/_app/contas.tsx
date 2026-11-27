@@ -1,20 +1,36 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import {
+  Archive,
+  ArchiveRestore,
+  CircleEllipsis,
   CreditCard,
   Landmark,
+  MoreHorizontal,
+  Pencil,
   PiggyBank,
   Plus,
+  Trash2,
   TrendingUp,
   Wallet,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
+import {
+  accountApi,
+  apiErrorMessage,
+  apiErrorStatus,
+  apiFieldErrors,
+} from '#/api/api'
+import type { Account, AccountRequest, AccountType } from '#/api/types'
+import { ColorPicker, Field, FormError } from '#/components/form'
 import { PageHeader } from '#/components/layout/page-header'
-import { ErrorState } from '#/components/layout/states'
+import { EmptyState, ErrorState } from '#/components/layout/states'
+import { Badge } from '#/components/ui/badge'
 import { Button } from '#/components/ui/button'
 import {
   Card,
+  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
@@ -27,124 +43,228 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from '#/components/ui/dialog'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '#/components/ui/dropdown-menu'
 import { Input } from '#/components/ui/input'
 import { Label } from '#/components/ui/label'
 import { NativeSelect } from '#/components/ui/native-select'
 import { Progress } from '#/components/ui/progress'
 import { Skeleton } from '#/components/ui/skeleton'
+import { Switch } from '#/components/ui/switch'
 import { useAsync } from '#/hooks/use-async'
-import { cn, formatCurrency } from '#/lib/utils'
-import { accountService } from '#/services/finance.service'
-import type { Account, AccountType } from '#/types'
+import {
+  amountToInput,
+  cn,
+  colorPalette,
+  formatCurrency,
+  parseAmount,
+} from '#/lib/utils'
 
 export const Route = createFileRoute('/_app/contas')({
   component: AccountsPage,
 })
 
 const accountTypes: Record<AccountType, { label: string; icon: LucideIcon }> = {
-  checking: { label: 'Conta corrente', icon: Landmark },
-  savings: { label: 'Poupança', icon: PiggyBank },
-  credit_card: { label: 'Cartão de crédito', icon: CreditCard },
-  investment: { label: 'Investimentos', icon: TrendingUp },
-  wallet: { label: 'Carteira', icon: Wallet },
+  CHECKING: { label: 'Conta corrente', icon: Landmark },
+  SAVINGS: { label: 'Poupança', icon: PiggyBank },
+  WALLET: { label: 'Carteira', icon: Wallet },
+  CREDIT_CARD: { label: 'Cartão de crédito', icon: CreditCard },
+  INVESTMENT: { label: 'Investimento', icon: TrendingUp },
+  OTHER: { label: 'Outro', icon: CircleEllipsis },
 }
 
-function AccountCard({ account }: { account: Account }) {
+/** Monta o corpo completo do PUT (substitui o registro inteiro) a partir da conta atual. */
+function toRequest(
+  a: Account,
+  overrides: Partial<AccountRequest> = {},
+): AccountRequest {
+  return {
+    name: a.name,
+    type: a.type,
+    institution: a.institution,
+    initialBalance: a.initialBalance,
+    creditLimit: a.creditLimit,
+    color: a.color,
+    archived: a.archived,
+    ...overrides,
+  }
+}
+
+function AccountCard({
+  account,
+  onEdit,
+  onArchive,
+  onRemove,
+}: {
+  account: Account
+  onEdit: () => void
+  onArchive: () => void
+  onRemove: () => void
+}) {
   const { label, icon: Icon } = accountTypes[account.type]
-  const isCard = account.type === 'credit_card'
-  const used = isCard ? Math.abs(account.balance) : 0
+  const isCard = account.type === 'CREDIT_CARD'
+  // No cartão, saldo negativo = fatura em aberto.
+  const invoice = isCard ? Math.max(0, -account.currentBalance) : 0
+  const color = account.color ?? 'var(--primary)'
   return (
-    <Card className="gap-4">
-      <CardHeader className="flex flex-row items-center gap-3">
-        <span
-          className="flex size-10 items-center justify-center rounded-lg"
-          style={{
-            backgroundColor: `color-mix(in oklch, ${account.color} 15%, transparent)`,
-            color: account.color,
-          }}
-        >
-          <Icon className="size-5" />
-        </span>
-        <div className="min-w-0">
-          <CardTitle className="truncate">{account.name}</CardTitle>
-          <CardDescription>
-            {account.institution} · {label}
-          </CardDescription>
+    <Card className={cn('gap-4', account.archived && 'opacity-60')}>
+      <CardHeader>
+        <div className="flex min-w-0 items-center gap-3">
+          <span
+            className="flex size-10 shrink-0 items-center justify-center rounded-lg"
+            style={{
+              backgroundColor: `color-mix(in oklch, ${color} 15%, transparent)`,
+              color,
+            }}
+          >
+            <Icon className="size-5" />
+          </span>
+          <div className="min-w-0">
+            <CardTitle className="flex items-center gap-2 truncate">
+              {account.name}
+              {account.archived && <Badge variant="outline">Arquivada</Badge>}
+            </CardTitle>
+            <CardDescription className="truncate">
+              {[account.institution, label].filter(Boolean).join(' · ')}
+            </CardDescription>
+          </div>
         </div>
+        <CardAction>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label={`Ações de ${account.name}`}
+              >
+                <MoreHorizontal />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onSelect={onEdit}>
+                <Pencil /> Editar
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={onArchive}>
+                {account.archived ? <ArchiveRestore /> : <Archive />}
+                {account.archived ? 'Desarquivar' : 'Arquivar'}
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem variant="destructive" onSelect={onRemove}>
+                <Trash2 /> Excluir
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </CardAction>
       </CardHeader>
       <CardContent className="space-y-3">
         <div>
           <p className="text-xs text-muted-foreground">
-            {isCard ? 'Fatura atual' : 'Saldo'}
+            {isCard ? 'Fatura atual' : 'Saldo atual'}
           </p>
           <p
             className={cn(
               'text-2xl font-semibold tabular-nums',
-              account.balance < 0 && !isCard && 'text-expense',
+              !isCard && account.currentBalance < 0 && 'text-expense',
             )}
           >
-            {formatCurrency(isCard ? used : account.balance)}
+            {formatCurrency(isCard ? invoice : account.currentBalance)}
           </p>
         </div>
-        {isCard && account.creditLimit && (
+        {isCard && account.creditLimit ? (
           <div className="space-y-1.5">
             <Progress
-              value={(used / account.creditLimit) * 100}
-              indicatorStyle={{ backgroundColor: account.color }}
+              value={(invoice / account.creditLimit) * 100}
+              indicatorStyle={{ backgroundColor: color }}
             />
             <p className="text-xs text-muted-foreground">
-              Disponível: {formatCurrency(account.creditLimit - used)} de{' '}
+              Disponível:{' '}
+              {formatCurrency(Math.max(0, account.creditLimit - invoice))} de{' '}
               {formatCurrency(account.creditLimit)}
             </p>
           </div>
-        )}
+        ) : null}
       </CardContent>
     </Card>
   )
 }
 
-function NewAccountDialog({ onCreated }: { onCreated: () => void }) {
-  const [open, setOpen] = useState(false)
-  const [type, setType] = useState<AccountType>('checking')
+function AccountFormDialog({
+  open,
+  account,
+  onOpenChange,
+  onSaved,
+}: {
+  open: boolean
+  account?: Account
+  onOpenChange: (open: boolean) => void
+  onSaved: () => void
+}) {
+  const [type, setType] = useState<AccountType>('CHECKING')
+  const [color, setColor] = useState(colorPalette[1])
+  const [error, setError] = useState<string | null>(null)
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+  const [submitting, setSubmitting] = useState(false)
+
+  useEffect(() => {
+    if (!open) return
+    setType(account?.type ?? 'CHECKING')
+    setColor(account?.color ?? colorPalette[1])
+    setError(null)
+    setFieldErrors({})
+  }, [open, account])
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const form = new FormData(event.currentTarget)
-    const balance = Number(String(form.get('balance') || '0').replace(',', '.'))
-    const limit = Number(
-      String(form.get('creditLimit') || '0').replace(',', '.'),
-    )
-    await accountService.create({
+    const initial = parseAmount(form.get('initialBalance'))
+    const limit = parseAmount(form.get('creditLimit'))
+    const body: AccountRequest = {
       name: String(form.get('name')).trim(),
-      institution: String(form.get('institution')).trim(),
       type,
-      balance: type === 'credit_card' ? -Math.abs(balance) : balance,
-      creditLimit: type === 'credit_card' ? limit : undefined,
-      color: 'var(--chart-6)',
-    })
-    setOpen(false)
-    onCreated()
+      institution: String(form.get('institution')).trim() || undefined,
+      initialBalance: Number.isNaN(initial) ? 0 : initial,
+      creditLimit:
+        type === 'CREDIT_CARD' && !Number.isNaN(limit) ? limit : undefined,
+      color,
+      archived: account?.archived ?? false,
+    }
+    setSubmitting(true)
+    setError(null)
+    setFieldErrors({})
+    try {
+      if (account) await accountApi.update(account.id, body)
+      else await accountApi.create(body)
+      onOpenChange(false)
+      onSaved()
+    } catch (err) {
+      const fields = apiFieldErrors(err)
+      setFieldErrors(fields)
+      if (Object.keys(fields).length === 0) setError(apiErrorMessage(err))
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button>
-          <Plus /> Nova conta
-        </Button>
-      </DialogTrigger>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Nova conta ou cartão</DialogTitle>
+          <DialogTitle>
+            {account ? 'Editar conta' : 'Nova conta ou cartão'}
+          </DialogTitle>
           <DialogDescription>
-            Cadastre onde seu dinheiro está.
+            O saldo atual é calculado a partir do saldo inicial e das
+            movimentações.
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="grid gap-4">
-          <div className="grid gap-2">
-            <Label htmlFor="type">Tipo</Label>
+        <form onSubmit={handleSubmit} className="grid gap-4" noValidate>
+          <Field label="Tipo" htmlFor="type" error={fieldErrors.type}>
             <NativeSelect
               id="type"
               value={type}
@@ -156,63 +276,83 @@ function NewAccountDialog({ onCreated }: { onCreated: () => void }) {
                 </option>
               ))}
             </NativeSelect>
-          </div>
+          </Field>
           <div className="grid gap-4 sm:grid-cols-2">
-            <div className="grid gap-2">
-              <Label htmlFor="name">Nome</Label>
+            <Field label="Nome" htmlFor="name" error={fieldErrors.name}>
               <Input
                 id="name"
                 name="name"
                 required
+                maxLength={60}
+                defaultValue={account?.name}
                 placeholder="Ex.: Conta salário"
               />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="institution">Instituição</Label>
+            </Field>
+            <Field
+              label="Instituição (opcional)"
+              htmlFor="institution"
+              error={fieldErrors.institution}
+            >
               <Input
                 id="institution"
                 name="institution"
-                required
+                maxLength={60}
+                defaultValue={account?.institution}
                 placeholder="Ex.: Banco X"
               />
-            </div>
+            </Field>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
-            <div className="grid gap-2">
-              <Label htmlFor="balance">
-                {type === 'credit_card'
-                  ? 'Fatura atual (R$)'
-                  : 'Saldo inicial (R$)'}
-              </Label>
+            <Field
+              label="Saldo inicial (R$)"
+              htmlFor="initialBalance"
+              error={fieldErrors.initialBalance}
+              hint={
+                type === 'CREDIT_CARD'
+                  ? 'Use valor negativo para fatura já em aberto'
+                  : undefined
+              }
+            >
               <Input
-                id="balance"
-                name="balance"
+                id="initialBalance"
+                name="initialBalance"
                 inputMode="decimal"
+                defaultValue={amountToInput(account?.initialBalance)}
                 placeholder="0,00"
               />
-            </div>
-            {type === 'credit_card' && (
-              <div className="grid gap-2">
-                <Label htmlFor="creditLimit">Limite (R$)</Label>
+            </Field>
+            {type === 'CREDIT_CARD' && (
+              <Field
+                label="Limite (R$)"
+                htmlFor="creditLimit"
+                error={fieldErrors.creditLimit}
+              >
                 <Input
                   id="creditLimit"
                   name="creditLimit"
                   inputMode="decimal"
-                  required
+                  defaultValue={amountToInput(account?.creditLimit)}
                   placeholder="0,00"
                 />
-              </div>
+              </Field>
             )}
           </div>
+          <div className="grid gap-2">
+            <Label>Cor</Label>
+            <ColorPicker value={color} onChange={setColor} />
+          </div>
+          <FormError message={error} />
           <DialogFooter>
             <Button
               type="button"
               variant="outline"
-              onClick={() => setOpen(false)}
+              onClick={() => onOpenChange(false)}
             >
               Cancelar
             </Button>
-            <Button type="submit">Salvar</Button>
+            <Button type="submit" disabled={submitting}>
+              {submitting ? 'Salvando…' : 'Salvar'}
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>
@@ -221,23 +361,82 @@ function NewAccountDialog({ onCreated }: { onCreated: () => void }) {
 }
 
 function AccountsPage() {
-  const { data, error, isLoading, reload } = useAsync(() =>
-    accountService.list(),
+  const [showArchived, setShowArchived] = useState(false)
+  const [dialog, setDialog] = useState<{ open: boolean; account?: Account }>({
+    open: false,
+  })
+  const [message, setMessage] = useState<string | null>(null)
+  const { data, error, isLoading, reload } = useAsync(
+    () => accountApi.list(showArchived),
+    [showArchived],
   )
-  const total = (data ?? [])
-    .filter((a) => a.type !== 'credit_card')
-    .reduce((s, a) => s + a.balance, 0)
-  const invoices = (data ?? [])
-    .filter((a) => a.type === 'credit_card')
-    .reduce((s, a) => s + Math.abs(a.balance), 0)
+
+  const active = (data ?? []).filter((a) => !a.archived)
+  const total = active
+    .filter((a) => a.type !== 'CREDIT_CARD')
+    .reduce((s, a) => s + a.currentBalance, 0)
+  const invoices = active
+    .filter((a) => a.type === 'CREDIT_CARD')
+    .reduce((s, a) => s + Math.max(0, -a.currentBalance), 0)
+
+  async function toggleArchive(account: Account) {
+    setMessage(null)
+    try {
+      await accountApi.update(
+        account.id,
+        toRequest(account, { archived: !account.archived }),
+      )
+      void reload()
+    } catch (err) {
+      setMessage(apiErrorMessage(err))
+    }
+  }
+
+  async function remove(account: Account) {
+    if (!window.confirm(`Excluir a conta "${account.name}"?`)) return
+    setMessage(null)
+    try {
+      await accountApi.remove(account.id)
+      void reload()
+    } catch (err) {
+      if (apiErrorStatus(err) === 409) {
+        if (
+          window.confirm(
+            `${apiErrorMessage(err)}\n\nDeseja arquivar a conta "${account.name}"?`,
+          )
+        ) {
+          await toggleArchive({ ...account, archived: false })
+        }
+      } else {
+        setMessage(apiErrorMessage(err))
+      }
+    }
+  }
 
   return (
     <>
       <PageHeader
         title="Contas e cartões"
         description="Gerencie suas contas bancárias, carteiras e cartões de crédito."
-        actions={<NewAccountDialog onCreated={reload} />}
+        actions={
+          <>
+            <div className="flex items-center gap-2 text-sm">
+              <Switch
+                id="archived"
+                checked={showArchived}
+                onCheckedChange={setShowArchived}
+              />
+              <Label htmlFor="archived" className="font-normal">
+                Mostrar arquivadas
+              </Label>
+            </div>
+            <Button onClick={() => setDialog({ open: true })}>
+              <Plus /> Nova conta
+            </Button>
+          </>
+        }
       />
+      {message && <FormError message={message} />}
       {error ? (
         <ErrorState error={error} onRetry={reload} />
       ) : isLoading && !data ? (
@@ -246,6 +445,16 @@ function AccountsPage() {
             <Skeleton key={i} className="h-44 rounded-xl" />
           ))}
         </div>
+      ) : data?.length === 0 ? (
+        <EmptyState
+          title="Nenhuma conta cadastrada"
+          description="Cadastre uma conta para começar a registrar movimentações."
+          action={
+            <Button onClick={() => setDialog({ open: true })}>
+              Cadastrar conta
+            </Button>
+          }
+        />
       ) : (
         <>
           <div className="grid gap-4 sm:grid-cols-2">
@@ -264,11 +473,23 @@ function AccountsPage() {
           </div>
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {data?.map((account) => (
-              <AccountCard key={account.id} account={account} />
+              <AccountCard
+                key={account.id}
+                account={account}
+                onEdit={() => setDialog({ open: true, account })}
+                onArchive={() => void toggleArchive(account)}
+                onRemove={() => void remove(account)}
+              />
             ))}
           </div>
         </>
       )}
+      <AccountFormDialog
+        open={dialog.open}
+        account={dialog.account}
+        onOpenChange={(open) => setDialog((d) => ({ ...d, open }))}
+        onSaved={reload}
+      />
     </>
   )
 }
